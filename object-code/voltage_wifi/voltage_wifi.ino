@@ -9,8 +9,8 @@ Adafruit_ADS1115 ads;
 SoftwareSerial mySerial(13, 12);
 ESP8266 wifi(mySerial, 115200);
 
-const unsigned long time_interval = 1000 * 60 * 30;
-unsigned long time_start = 0;
+const uint16_t time_interval = 1000 * 60 * 25;
+uint16_t time_start = 0;
 
 const char url[] = "at.aiamv.cn";
 const uint32_t port = 80;
@@ -29,15 +29,20 @@ Accept : text/html\n\n\n\n";
 
 void setup()
 {
+	
 	ads1015.begin();
 	ads1015.setGain(GAIN_ONE);
 	Serial.begin(115200);
 	while (!Serial) {;}
 
 	wifi.restart();
-	delay(2000);
 	time_start = millis();
+	Serial.print(">>>> ");		
+	Serial.println(time_start);
+	delay(2000);
+	
 	Serial.println(">>>> get start time");
+	send_data();
 }
 
 float get_voltage()
@@ -46,16 +51,14 @@ float get_voltage()
 	return (adc1 * 2.00) / 1000.0;
 }
 
-void loop(void)
+void send_data()
 {
-	if (abs(millis() - time_start) < time_interval)
-		return;
 	Serial.println(">>>> begin");
 	// 连接 WiFi
 	while (!wifi.joinAP(ssid, pwd)) {
 		Serial.print(">>>> wifi connection error\n");
 		wifi.restart();
-		delay(1000);
+		delay(10000);
 	}
 	Serial.print(">>>> wifi connection success\n");
 	
@@ -91,6 +94,14 @@ void loop(void)
 	Serial.print(">>>> leave wifi ");
 	wifi.releaseTCP();
 	time_start = millis();
-	Serial.println(">>>> again get start time"); 
-	delay(1000);
+	Serial.println(">>>> get start time again"); 
+	delay(1000);	
+}
+void loop(void)
+{
+	if (millis() < time_start)
+		time_start -= millis();
+	if ((uint16_t)millis() - time_start < time_interval)
+		return;
+	send_data();
 }
