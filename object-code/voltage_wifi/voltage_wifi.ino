@@ -1,149 +1,116 @@
 #include <Wire.h>
 #include <SoftwareSerial.h>
+#include <avr/boot.h>
 #include "Adafruit_ADS1015.h"
-#include "ESP8266.h"
 
-Adafruit_ADS1015 ads1015;
-Adafruit_ADS1115 ads;
+/*
+   const char url[] = "at.aiamv.cn";
+   const char port = 80;
 
-SoftwareSerial mySerial(13, 12);
-ESP8266 wifi(mySerial, 115200);
-
-const uint16_t time_interval = 1000 * 60 * 1;
-
-const char url[] = "at.aiamv.cn";
-const char port = 80;
-
-const char ssid[] = "NETGEAR";
-const char pwd[] = "12345678900";
-
-const char ID = 3;
-
-const char str_head[] = "GET /send.php?";
-const char str_body[] = "\
- HTTP/1.1\n\
-Host: at.aiamv.cn\n\
-Connection : close\n\
-Accept : text/html\n\n\n\n";
+   const char ssid[] = "NETGEAR";
+   const char pwd[] = "12345678900";
 
 
-void print_id()
+   AT+CWMODE_DEF=1
+
+   AT+CWJAP_DEF="NETGEAR","12345678900"
+
+   AT+CWAUTOCONN=1
+
+   AT+CIPSTART="TCP","183.230.40.33","80"
+
+   AT+CIPMODE=1
+
+   AT+CIPSEND
+
+GET /send.php?voltage=0.5&id=88555550535125571933 HTTP/1.1
+	Host: at.aiamv.cn
+	Connection : close
+	Accept : text/html
+
+
+
+*/
+
+Adafruit_ADS1015 ads;
+SoftwareSerial mySerial(10, 11); // RX, TX 配置10、11为软串口
+String device_id;
+
+String get_device_id()
 {
-	Serial.print(">>>> ID = ");
-	Serial.println((int)ID);
-	Serial.println(">>>> setup begin");	
+	for (int i = 14; i < 24; i++)
+		device_id.concat(boot_signature_byte_get(i));
 }
 
 void hardware_init()
 {
-	ads1015.begin();
-	ads1015.setGain(GAIN_ONE);
+	ads.begin();
 	Serial.begin(115200);
 	while (!Serial);
-
-	wifi_init();
+	mySerial.begin(115200);
 }
 
-void wifi_init()
+void get_voltage(char *voltage)
 {
-	wifi.restart();
-	delay(10000);
-	wifi.leaveAP();
-	delay(10000);
+	int16_t results = ads.readADC_Differential_0_1();
+	double v = results * 3.0F / 1000.0;
+	dtostrf(fabs(v), 0, 3, voltage);
+}
+
+void format_string(char *voltage, String device_id, char *str)
+{
+	sprintf(str, 
+"GET /send.php?voltage=%s&id=4 HTTP/1.1\n\
+Host: at.aiamv.cn\n\
+Connection : close\n\
+Accept : text/html\r\n\r\n\r\n\r\n",
+			voltage);
 }
 
 void setup()
 {
+	get_device_id();
 	hardware_init();
-
-	print_id();	
-	wifi_connect();
-	send_data();
-	receive_data();
-	wifi_close();
+	Serial.println("device id = " + device_id + ";");
+	set_link();
 }
 
-float get_voltage()
-{
-	return ((uint16_t)(ads1015.readADC_SingleEnded(0)) * 2.00) / 1000.0;
-}
-
-void wifi_connect()
-{
-	// 连接 WiFi
-	while (!wifi.joinAP(ssid, pwd)) {
-		Serial.print(">>>> wifi connection error\n");
-		wifi.leaveAP();
-		delay(10000);		
-	}
-	Serial.print(">>>> wifi connection success\n");
-}
-
-void wifi_close()
-{
-	Serial.print(">>>> leave wifi ");
-	wifi.releaseTCP();
-	delay(10000);
-	wifi.leaveAP();
-	delay(10000);	
-}
-
-void TCP_connect()
-{
-	// 与服务器进行 TCP 连接
-	while (!wifi.createTCP(url, (int)port)) {
-		Serial.print(">>>> creat tcp error\n");
-		delay(1000);
-	}
-	Serial.print(">>>> creat tcp success\n");
-}
-
-void print_get_string(String &get)
-{
-	Serial.println(">>> get_string ------------");
-	Serial.println(get.c_str());
-	Serial.println("------------ <<<\n");	
-}
+const uint16_t time_interval = 60000 * 10;
 
 void send_data()
-{	
-	String get = str_head;
-	get = get + "voltage=" + get_voltage() + "&id=" + ID + str_body;
-	
-	Serial.println(wifi.getIPStatus());
-	TCP_connect();
-	Serial.println(wifi.getIPStatus());
-
-	if (wifi.send(get.c_str(), get.length()))
-		Serial.println(">>>> send success");
-	else
-		Serial.println(">>>> send error");
-	
-	print_get_string(get);
+{
+	char vo[10] = {0};
+	get_voltage(vo);
+	Serial.println(vo);
+	char str[200] ={0};
+	format_string(vo, device_id, str);	
+	Serial.println(str);
+	mySerial.println(str);
+	delay(1000);
 }
 
-char *receive_data()
+void set_link()
 {
-	static char result[200] = {0};
-	wifi.recv(result, 200);
-	Serial.println(">>>> result >>> ------------");
-	Serial.println(result);
-	Serial.println("------------ <<<\n");
-	return result;
+	mySerial.println("AT+CIPSTART=\"TCP\",\"at.aiamv.cn\",80");
+	delay(1000);
+	mySerial.println("AT+CIPMODE=1");
+	delay(1000);
+	mySerial.println("AT+CIPSEND");
+}
+
+void debug()
+{
+	while (1) {
+		if (mySerial.available())
+			Serial.write(mySerial.read());
+		if (Serial.available())
+			mySerial.write(Serial.read());
+	}	
 }
 
 void loop(void)
 {
-	uint16_t t = millis() % time_interval;
-	if (t > 500)
-		return;
-	Serial.println(millis());
-	Serial.println(">>>> loop begin");
-	wifi_connect();
 	send_data();
-	receive_data();
-	wifi_close();
-	Serial.println(">>>> loop end");
-	
-	delay(1000);
+	delay(100000 * 5);
+//	debug();
 }
