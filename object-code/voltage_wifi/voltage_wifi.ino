@@ -96,6 +96,7 @@ void set_link()
 	mySerial.println("AT+CIPMODE=1");
 	delay(1000);
 	mySerial.println("AT+CIPSEND");
+	delay(2000);
 }
 
 void debug()
@@ -110,7 +111,7 @@ void debug()
 
 void loop(void)
 {
+//	debug();
 	send_data();
 	delay(100000 * 5);
-//	debug();
 }
