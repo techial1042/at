@@ -3,115 +3,167 @@
 #include <avr/boot.h>
 #include "Adafruit_ADS1015.h"
 
-/*
-   const char url[] = "at.aiamv.cn";
-   const char port = 80;
-
-   const char ssid[] = "NETGEAR";
-   const char pwd[] = "12345678900";
-
-
-   AT+CWMODE_DEF=1
-
-   AT+CWJAP_DEF="NETGEAR","12345678900"
-
-   AT+CWAUTOCONN=1
-
-   AT+CIPSTART="TCP","183.230.40.33","80"
-
-   AT+CIPMODE=1
-
-   AT+CIPSEND
-
-GET /send.php?voltage=0.5&id=88555550535125571933 HTTP/1.1
-	Host: at.aiamv.cn
-	Connection : close
-	Accept : text/html
-
-
-
-*/
-
+#define RX 10
+#define TX 11
+SoftwareSerial serial(RX, TX);
 Adafruit_ADS1015 ads;
-SoftwareSerial mySerial(10, 11); // RX, TX 配置10、11为软串口
 String device_id;
+unsigned char CONNECT_STATUS_FAIL = 0;
+unsigned char CONNECT_STATUS_FAIL_COUNT = 10;
 
-String get_device_id()
-{
-	for (int i = 14; i < 24; i++)
-		device_id.concat(boot_signature_byte_get(i));
-}
-
-void hardware_init()
+void setup()
 {
 	ads.begin();
 	Serial.begin(115200);
 	while (!Serial);
-	mySerial.begin(115200);
+	serial.begin(115200);
+	firmware();
+	device_id = get_deivce_id_string();
+	Serial.println("device id = " + device_id + ";");
 }
 
-void get_voltage(char *voltage)
+void loop(void)
+{
+	String post = foramt_send_data(get_deivce_id_string(), device_id);
+	if (!is_send_success(post.c_str())) {
+		CONNECT_STATUS_FAIL++;
+	}
+	//debug();
+	Serial.println(">------------------\n"
+	               + post
+	               + "----------------<\n");
+	if (CONNECT_STATUS_FAIL >= CONNECT_STATUS_FAIL_COUNT) {
+		restart();
+	}
+	delay(2000);
+}
+
+
+String get_deivce_id_string()
+{
+	String str;
+	for (int i = 14; i < 24; i++)
+		str.concat(boot_signature_byte_get(i));
+	return str;
+}
+
+double get_voltage_num()
 {
 	int16_t results = ads.readADC_Differential_0_1();
-	double v = results * 3.0F / 1000.0;
-	dtostrf(fabs(v), 0, 3, voltage);
+	return (double)results * 3.0F / 1000.0;
 }
 
-void format_string(char *voltage, String device_id, char *str)
+String get_voltage_string(unsigned char accuracy = 3)
 {
-	sprintf(str, 
-"GET /send.php?voltage=%s&id=4 HTTP/1.1\n\
-Host: at.aiamv.cn\n\
-Connection : close\n\
-Accept : text/html\r\n\r\n\r\n\r\n",
-			voltage);
+	double voltage = get_voltage_num();
+	voltage = abs(voltage);
+	return String(voltage, accuracy);
 }
 
-void setup()
+bool is_send_success(char *post)
 {
-	get_device_id();
-	hardware_init();
-	Serial.println("device id = " + device_id + ";");
-	set_link();
+	serial.println(post);
+	String event = serial_event();
+	return (event.indexOf("SUCCESS") == -1) || (event.indexOf("200 OK") == -1);
 }
 
-const uint16_t time_interval = 60000 * 10;
-
-void send_data()
+String serial_event()
 {
-	char vo[10] = {0};
-	get_voltage(vo);
-	Serial.println(vo);
-	char str[200] ={0};
-	format_string(vo, device_id, str);	
-	Serial.println(str);
-	mySerial.println(str);
-	delay(1000);
+	String input;
+	while (Serial.available()) {
+		char tmp = (char)Serial.read();
+		input += tmp;
+		if (tmp == '\n')
+			break;
+	}
+	input.trim();
+	return input;
 }
 
-void set_link()
+String foramt_send_data(String voltage, String device_id)
 {
-	mySerial.println("AT+CIPSTART=\"TCP\",\"at.aiamv.cn\",80");
-	delay(1000);
-	mySerial.println("AT+CIPMODE=1");
-	delay(1000);
-	mySerial.println("AT+CIPSEND");
-	delay(2000);
+	String data = String("voltage=") + voltage
+	              + String("&id=") + device_id;
+
+	return String("GET /send.php?") + data + String(" HTTP/1.1\n")
+	       + String("Host: at.aiamv.cn\n")
+	       + String("Connection : close\n")
+	       + String("Accept : text/html\n")
+	       + String("\n\n\n");
 }
 
 void debug()
 {
 	while (1) {
-		if (mySerial.available())
-			Serial.write(mySerial.read());
+		if (serial.available())
+			Serial.write(serial.read());
 		if (Serial.available())
-			mySerial.write(Serial.read());
-	}	
+			serial.write(Serial.read());
+	}
 }
 
-void loop(void)
+void restart()
 {
-//	debug();
-	send_data();
-	delay(100000 * 5);
+	serial.print("+++");
+	delay(500);
+	serial.println("\r\n");
+	delay(1000);
+	serial.println("AT+RST");
+	delay(10000);
+	CONNECT_STATUS_FAIL = 0;
+}
+
+/*
+ *	发送 at 指令模拟固件
+ *	+++ 退出透传模式
+ *	restart 重启设备
+ *	ate0 关闭回显
+ *	gmr 查询版本信息
+ */
+void firmware()
+{
+	serial.print("+++");
+	delay(500);
+	serial.println("\r\n");
+	delay(1000);
+	serial.println("AT+RESTORE");
+	delay(5000);
+	serial.println("ATE0");
+	delay(1000);
+	serial.println("AT+GMR");
+	delay(1000);
+
+	save_in_flash();
+}
+
+/*
+ *	将配置写入 flash, 断电不消失
+ *
+ *	cwmode 配置为终端模式
+ *
+ *	cwjap 连接到 WiFi AT+CWJAP_DEF=<ssid>,<pwd>[,<bssid>]
+ *
+ *	cwautoconn 上电自动连上 WiFi
+ *
+ *	cipmux 设置 TCP 单链接
+ *
+ *	cipmode=1 设置为透传模式
+ *
+ *	savetranslink 保存透传到 falsh
+ *	AT+SAVETRANSLINK=<mode>,<remote IP or domain name>,<remote port>[,<type>,<TC keep alive>]
+ */
+void save_in_flash()
+{
+	serial.println("AT+CWMODE_DEF=1");
+	delay(3000);
+	serial.println("AT+CWJAP_DEF=\"NETGEAR\",\"12345678900\"");
+	delay(5000);
+	serial.println("AT+CWAUTOCONN=1");
+	delay(3000);
+	serial.println("AT+CIPMUX=1");
+	delay(3000);
+	serial.println("AT+SAVETRANSLINK=1,\"at.aiamv.cn\",80,\"TCP\"");
+	delay(3000);
+	serial.println("AT+RST");
+	delay(5000);
 }
