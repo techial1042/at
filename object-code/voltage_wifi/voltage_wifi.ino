@@ -1,149 +1,187 @@
 #include <Wire.h>
 #include <SoftwareSerial.h>
+#include <avr/boot.h>
 #include "Adafruit_ADS1015.h"
-#include "ESP8266.h"
 
-Adafruit_ADS1015 ads1015;
-Adafruit_ADS1115 ads;
-
-SoftwareSerial mySerial(13, 12);
-ESP8266 wifi(mySerial, 115200);
-
-const uint16_t time_interval = 1000 * 60 * 1;
-
-const char url[] = "at.aiamv.cn";
-const char port = 80;
-
-const char ssid[] = "NETGEAR";
-const char pwd[] = "12345678900";
-
-const char ID = 3;
-
-const char str_head[] = "GET /send.php?";
-const char str_body[] = "\
- HTTP/1.1\n\
-Host: at.aiamv.cn\n\
-Connection : close\n\
-Accept : text/html\n\n\n\n";
-
-
-void print_id()
-{
-	Serial.print(">>>> ID = ");
-	Serial.println((int)ID);
-	Serial.println(">>>> setup begin");	
-}
-
-void hardware_init()
-{
-	ads1015.begin();
-	ads1015.setGain(GAIN_ONE);
-	Serial.begin(115200);
-	while (!Serial);
-
-	wifi_init();
-}
-
-void wifi_init()
-{
-	wifi.restart();
-	delay(10000);
-	wifi.leaveAP();
-	delay(10000);
-}
+#define RX 10
+#define TX 11
+#define RESET 9
+SoftwareSerial serial(RX, TX);
+Adafruit_ADS1015 ads;
+String device_id;
+unsigned int CONNECT_STATUS_FAIL = 0;
+unsigned int CONNECT_STATUS_FAIL_COUNT = 10;
 
 void setup()
 {
-	hardware_init();
-
-	print_id();	
-	wifi_connect();
-	send_data();
-	receive_data();
-	wifi_close();
+	ads.begin();
+	Serial.begin(115200);
+	while (!Serial);
+	serial.begin(115200);
+	//debug();
+	Serial.println("\n\nbegin");
+	firmware();
+	device_id = 3;//get_deivce_id_string();
+	Serial.println("device id = " + device_id + ";");
 }
 
-float get_voltage()
-{
-	return ((uint16_t)(ads1015.readADC_SingleEnded(0)) * 2.00) / 1000.0;
-}
-
-void wifi_connect()
-{
-	// 连接 WiFi
-	while (!wifi.joinAP(ssid, pwd)) {
-		Serial.print(">>>> wifi connection error\n");
-		wifi.leaveAP();
-		delay(10000);		
-	}
-	Serial.print(">>>> wifi connection success\n");
-}
-
-void wifi_close()
-{
-	Serial.print(">>>> leave wifi ");
-	wifi.releaseTCP();
-	delay(10000);
-	wifi.leaveAP();
-	delay(10000);	
-}
-
-void TCP_connect()
-{
-	// 与服务器进行 TCP 连接
-	while (!wifi.createTCP(url, (int)port)) {
-		Serial.print(">>>> creat tcp error\n");
-		delay(1000);
-	}
-	Serial.print(">>>> creat tcp success\n");
-}
-
-void print_get_string(String &get)
-{
-	Serial.println(">>> get_string ------------");
-	Serial.println(get.c_str());
-	Serial.println("------------ <<<\n");	
-}
-
-void send_data()
-{	
-	String get = str_head;
-	get = get + "voltage=" + get_voltage() + "&id=" + ID + str_body;
-	
-	Serial.println(wifi.getIPStatus());
-	TCP_connect();
-	Serial.println(wifi.getIPStatus());
-
-	if (wifi.send(get.c_str(), get.length()))
-		Serial.println(">>>> send success");
-	else
-		Serial.println(">>>> send error");
-	
-	print_get_string(get);
-}
-
-char *receive_data()
-{
-	static char result[200] = {0};
-	wifi.recv(result, 200);
-	Serial.println(">>>> result >>> ------------");
-	Serial.println(result);
-	Serial.println("------------ <<<\n");
-	return result;
-}
+void (*resetFunc)(void) = 0;
 
 void loop(void)
 {
-	uint16_t t = millis() % time_interval;
-	if (t > 500)
-		return;
-	Serial.println(millis());
-	Serial.println(">>>> loop begin");
-	wifi_connect();
-	send_data();
-	receive_data();
-	wifi_close();
-	Serial.println(">>>> loop end");
-	
+	String voltage = get_voltage_diff_string(3);
+	Serial.println("ADC differential 0_1, voltage = "
+			+ voltage + ";\n");
+	delay(200);
+	String post = foramt_send_data(device_id, voltage);
+	if (!is_send_success(post.c_str())) {
+		Serial.print("send error, count = ");
+		Serial.println(++CONNECT_STATUS_FAIL);
+	}
+	//Serial.println("post >------------------\n"
+	//               + post
+	//               + "----------------<\n");
+
+	if (CONNECT_STATUS_FAIL > CONNECT_STATUS_FAIL_COUNT) {
+		resetFunc();
+		delay(2000);
+		digitalWrite(RESET, LOW);
+		delay(2000);
+		restart();
+		delay(2000);
+	}
+	delay(99000);
+}
+
+String get_deivce_id_string()
+{
+	String str;
+	for (int i = 14; i < 24; i++)
+		str.concat(boot_signature_byte_get(i));
+	return str;
+}
+
+double get_voltage_diff_num()
+{
+	int16_t results = ads.readADC_Differential_0_1();
+	double diff = (double)results * 3.0F / 1000.0;
+	return fabs(diff);
+}
+
+String get_voltage_diff_string(unsigned char accuracy)
+{
+	double voltage = get_voltage_diff_num();
+	return String(voltage, accuracy);
+}
+
+bool is_send_success(char *post)
+{
+	serial.println(post);
+	String event = serial_event();
+	Serial.println("event >-----------------\n"
+			+ event
+			+ "---------------<\n");
+	return ((event.indexOf("SUCCESS") != -1) || (event.indexOf("200 OK") != -1));
+}
+
+String serial_event()
+{
+	String input;
+	static const unsigned long long timeout = 1000 * 2;
+	unsigned long long time_start = millis();
+	while (millis() - time_start < timeout) {
+		if (serial.available()) {
+			input += (char)serial.read();
+		}
+	}
+	input.trim();
+	return input;
+}
+
+String foramt_send_data(String device_id, String voltage)
+{
+	String data = String("voltage=") + voltage
+		+ String("&id=") + device_id;
+
+	return String("GET /send.php?") + data + String(" HTTP/1.1\n")
+		+ String("Host: at.aiamv.cn\n")
+		+ String("Connection : close\n")
+		+ String("Accept : text/html\n")
+		+ String("\n\n\n");
+}
+
+void debug()
+{
+	while (1) {
+		if (serial.available())
+			Serial.write(serial.read());
+		if (Serial.available())
+			serial.write(Serial.read());
+	}
+}
+
+void restart()
+{
+	serial.print("+++");
+	delay(500);
+	serial.println("\r\n");
 	delay(1000);
+	serial.println("AT+RST");
+	delay(10000);
+	CONNECT_STATUS_FAIL = 0;
+}
+
+/*
+ *	发送 at 指令模拟固件
+ *	+++ 退出透传模式
+ *	restart 重启设备
+ *	ate0 关闭回显
+ *	gmr 查询版本信息
+ */
+void firmware()
+{
+	serial.print("+++");
+	delay(500);
+	serial.println("\r\n");
+	delay(1000);
+	serial.println("AT+RESTORE");
+	delay(5000);
+	serial.println("ATE0");
+	delay(1000);
+	serial.println("AT+GMR");
+	delay(1000);
+
+	save_in_flash();
+}
+
+/*
+ *	将配置写入 flash, 断电不消失
+ *
+ *	cwmode 配置为终端模式
+ *
+ *	cwjap 连接到 WiFi AT+CWJAP_DEF=<ssid>,<pwd>[,<bssid>]
+ *
+ *	cwautoconn 上电自动连上 WiFi
+ *
+ *	cipmux 设置 TCP 单链接
+ *
+ *	cipmode=1 设置为透传模式
+ *
+ *	savetranslink 保存透传到 falsh
+ *	AT+SAVETRANSLINK=<mode>,<remote IP or domain name>,<remote port>[,<type>,<TC keep alive>]
+ */
+void save_in_flash()
+{
+	serial.println("AT+CWMODE_DEF=1");
+	delay(3000);
+	serial.println("AT+CWJAP_DEF=\"NETGEAR\",\"12345678900\"");
+	delay(5000);
+	serial.println("AT+CWAUTOCONN=1");
+	delay(3000);
+	serial.println("AT+CIPMUX=1");
+	delay(3000);
+	serial.println("AT+SAVETRANSLINK=1,\"at.aiamv.cn\",80,\"TCP\"");
+	delay(3000);
+	serial.println("AT+RST");
+	delay(5000);
 }
