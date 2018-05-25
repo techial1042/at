@@ -1,5 +1,5 @@
 #include <Wire.h>
-#include <SoftwareSerial.h>
+#include "SoftwareSerial.h"
 #include <avr/boot.h>
 #include "Adafruit_ADS1015.h"
 
@@ -21,7 +21,7 @@ void setup()
 	//debug();
 	Serial.println("\n\nbegin");
 	firmware();
-	device_id = 3;//get_deivce_id_string();
+	device_id = get_deivce_id_string();
 	Serial.println("device id = " + device_id + ";");
 }
 
@@ -38,9 +38,9 @@ void loop(void)
 		Serial.print("send error, count = ");
 		Serial.println(++CONNECT_STATUS_FAIL);
 	}
-	//Serial.println("post >------------------\n"
-	//               + post
-	//               + "----------------<\n");
+	//Serial.println("post >------------------\n");
+	//Serial.println(post);
+	//Serial.println("----------------<\n");
 
 	if (CONNECT_STATUS_FAIL > CONNECT_STATUS_FAIL_COUNT) {
 		resetFunc();
@@ -78,23 +78,19 @@ bool is_send_success(char *post)
 {
 	serial.println(post);
 	String event = serial_event();
-	Serial.println("event >-----------------\n"
-			+ event
-			+ "---------------<\n");
+	delay(1000);
+	Serial.println("event >----------------");
+	Serial.println(event);
+	Serial.println("----------------------<");
 	return ((event.indexOf("SUCCESS") != -1) || (event.indexOf("200 OK") != -1));
 }
 
 String serial_event()
 {
 	String input;
-	static const unsigned long long timeout = 1000 * 2;
-	unsigned long long time_start = millis();
-	while (millis() - time_start < timeout) {
-		if (serial.available()) {
-			input += (char)serial.read();
-		}
+	while (serial.available()) {
+		input += (char)serial.read();
 	}
-	input.trim();
 	return input;
 }
 
