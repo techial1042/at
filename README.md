@@ -15,12 +15,12 @@
 - 串口调试工具
 - 服务器
 
-**相关链接保存**
+#### 相关链接保存
 
 - ADS1X15
 	- [https://github.com/adafruit/Adafruit_ADS1X15](https://github.com/adafruit/Adafruit_ADS1X15)
 
-**引脚连线**
+#### 引脚连线
 
 | Arduino | ESP8266 | ADS1015 |
 | :-----: | :-----: | :-----: |
@@ -34,15 +34,20 @@
 |   SCL   |    /    |   SCL   |
 |   SDA   |    /    |   SDA   |
 
+---
+
 ![Arduino_UNO.jpg](https://i.loli.net/2018/05/28/5b0b8b370dc7b.jpg)
 
 *Arduino UNO*
 
+---
 
 
 ![ads.png](https://i.loli.net/2018/05/28/5b0b8bd536780.png)
 
 *ADS1015*
+
+---
 
 ![esp8266.jpg](https://i.loli.net/2018/05/28/5b0b8c24297b1.jpg)
 
