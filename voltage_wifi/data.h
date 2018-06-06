@@ -13,13 +13,18 @@ unsigned int CONNECT_STATUS_FAIL = 0;
 unsigned int CONNECT_STATUS_FAIL_COUNT = 10;
 
 
+void clean_buffer()
+{
+	while (serial.available())
+		serial.read();
+}
+
 // 返回缓冲区的内容
 String serial_event()
 {
 	String input;
-	while (serial.available()) {
+	while (serial.available())
 		input += (char)serial.read();
-	}
 	return input;
 }
 
@@ -32,6 +37,7 @@ void send_at_command(const char *at,
                      const bool newline = true,
                      const unsigned long delay_time = 3000)
 {
+	clean_buffer();
 	delay(delay_time);
 	if (newline) {
 		serial.println(at);
@@ -48,7 +54,9 @@ void send_at_command(const char *at,
 String get_at_result(const char *at, const bool newline = true,
                      const unsigned long delay_time = 3000)
 {
+	clean_buffer();
 	send_at_command(at, newline, delay_time);
+	delay(220);
 	return serial_event();
 }
 
@@ -59,7 +67,7 @@ bool find_result(const String buffer, const char *res)
 
 
 /*
- * 构造 http 报文 
+ * 构造 http 报文
  * method 可以为 GET/POST 等等，区分大小写
  * url 请求的地址
  * version http版本号
@@ -71,7 +79,8 @@ String create_http_request_message(const char *method,
                                    const char *head, const char *body = "")
 {
 	char request[300] = {0};
-	sprintf("%s %s %s\n%s\n%s\n", method, url, version, head, body);
+	sprintf(request, "%s %s %s\n%s\n%s\n",
+	        method, url, version, head, body);
 	return String(request);
 }
 
@@ -111,7 +120,7 @@ void set_wifi(char *at,
  * 设置连接服务器，传进 at, ip, port, method
  * 格式化字符串后返回 at 指令
  * method TCP，UDP 二选一
- */ 
+ */
 void set_server_link(char *at, const char *ip, const unsigned int port,
                      const char *method)
 {
@@ -120,17 +129,17 @@ void set_server_link(char *at, const char *ip, const unsigned int port,
 
 /*
  * 将配置写入 flash, 断电不消失, at 指令后有带 _DEF 一般都是断电不丢失
- * 
+ *
  * cwmode 配置为终端模式
- * 
+ *
  * cwjap 连接到 WiFi AT+CWJAP_DEF=<ssid>,<pwd>[,<bssid>]
- * 
+ *
  * cwautoconn 上电自动连上 WiFi
- * 
+ *
  * cipmux 设置 TCP 单链接
- * 
+ *
  * cipmode=1 设置为透传模式
- * 
+ *
  * savetranslink 保存透传到 falsh
  * AT+SAVETRANSLINK=<mode>,<remote IP or domain name>,<remote port>[,<type>,<TC keep alive>]
  */

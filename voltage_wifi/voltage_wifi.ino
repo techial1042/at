@@ -20,8 +20,8 @@ void setup()
 	firmware();
 
 	// 获得并打印 arduino uno 唯一标识号
-	Serial.println("\n\n ---------- begin");
-	device_id = get_deivce_id_string();
+	Serial.println("\n\n---------- begin");
+	device_id = "4";//get_deivce_id_string();
 	Serial.println("device id = " + device_id + ";");
 }
 
@@ -36,16 +36,17 @@ void loop(void)
 	               + voltage + ";\n");
 	delay(200);
 
-
 	// 构造 url
 	char url_data[60] = {0};
-	sprintf("/send.php?voltage=%s&id=%s",
+	sprintf(url_data, "/send.php?voltage=%s&id=%s",
 	        voltage.c_str(), device_id.c_str());
+
 	String message = create_http_request_message("GET", url_data,
 	                 "HTTP/1.1",
 	                 "Host: at.aiamv.cn\n"
-	                 "Connection : close\n"
-	                 "Accept : text/html\n");
+	                 "Connection: close\n"
+	                 "Accept: text/html\n");
+	Serial.println(message);
 
 	// 发送 http 请求，并打印其返回值
 	String buffer = get_at_result(message.c_str());
@@ -54,7 +55,7 @@ void loop(void)
 	Serial.println("----------------<\n");
 
 	// 如果 find 200 OK，说明发送成功
-	if (!find_result(buffer, "200 OK")) {
+	if (find_result(buffer, "200 OK")) {
 		Serial.print("send error, count = ");
 		Serial.println(++CONNECT_STATUS_FAIL);
 	}
@@ -68,8 +69,8 @@ void loop(void)
 		restart();
 		delay(2000);
 	}
-
 	delay(99000);
+
 }
 
 // 获得 arduino uno 唯一标识号
