@@ -30,11 +30,15 @@ void (*resetFunc)(void) = 0;
 
 void loop(void)
 {
+	// 获得此时测量的电压
 	String voltage = get_voltage_diff_string(3);
 	Serial.println("ADC differential 0_1, voltage = "
 	               + voltage + ";\n");
 	delay(200);
-	char url_data[40] = {0};
+
+
+	// 构造 url
+	char url_data[60] = {0};
 	sprintf("/send.php?voltage=%s&id=%s",
 	        voltage.c_str(), device_id.c_str());
 	String message = create_http_request_message("GET", url_data,
@@ -43,20 +47,23 @@ void loop(void)
 	                 "Connection : close\n"
 	                 "Accept : text/html\n");
 
+	// 发送 http 请求，并打印其返回值
 	String buffer = get_at_result(message.c_str());
 	Serial.println("buffer >------------------\n");
 	Serial.println(buffer);
 	Serial.println("----------------<\n");
 
+	// 如果 find 200 OK，说明发送成功
 	if (!find_result(buffer, "200 OK")) {
 		Serial.print("send error, count = ");
 		Serial.println(++CONNECT_STATUS_FAIL);
 	}
 
+	// 发送次数过多，先重启 WiFi模块， 再重启 arduino
 	if (CONNECT_STATUS_FAIL > CONNECT_STATUS_FAIL_COUNT) {
-		resetFunc();
-		delay(2000);
 		digitalWrite(RESET, LOW);
+		delay(2000);
+		resetFunc();
 		delay(2000);
 		restart();
 		delay(2000);
@@ -80,6 +87,7 @@ String get_deivce_id_string()
 double get_voltage_diff_num()
 {
 	int16_t results = ads.readADC_Differential_0_1();
+	delay(100);
 	double diff = (double)results * 3.0F / 1000.0;
 	return fabs(diff);
 }

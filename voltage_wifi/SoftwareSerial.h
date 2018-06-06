@@ -40,6 +40,8 @@ http://arduiniana.org.
 ******************************************************************************/
 
 #ifndef _SS_MAX_RX_BUFF
+// 默认缓冲区大小为 64， 可以调大接收更多的字符
+//#define _SS_MAX_RX_BUFF 64 // RX buffer size
 #define _SS_MAX_RX_BUFF 256 // RX buffer size
 #endif
 
