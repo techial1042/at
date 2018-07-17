@@ -7,6 +7,9 @@
 Adafruit_ADS1015 ads;
 String device_id;
 
+#define _DEBUG_ADS1015
+#define _DEBUG_ESP8266
+
 void setup()
 {
 	// 串口等初始化
