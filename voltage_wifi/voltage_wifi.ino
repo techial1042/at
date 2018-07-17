@@ -7,8 +7,8 @@
 Adafruit_ADS1015 ads;
 String device_id;
 
-#define _DEBUG_ADS1015
-#define _DEBUG_ESP8266
+#define _DEBUG_ESP8266 0
+#define _DEBUG_ADS1015 0
 
 void setup()
 {
@@ -17,14 +17,31 @@ void setup()
 	Serial.begin(115200);
 	while (!Serial);
 	serial.begin(115200);
-	//debug();
+
+#if _DEBUG_ADS1015
+
+	while (1) {
+		String voltage = get_voltage_diff_string(3);
+		Serial.println("ADS differential 0_1, voltage = " +
+				voltage + ";\n");
+		delay(200);
+	}
+	
+#endif
+
+#if _DEBUG_ESP8266
+
+	debug();
+
+#endif
 
 	// 模拟烧录固件，使用 at 指令
 	firmware();
 
 	// 获得并打印 arduino uno 唯一标识号
 	Serial.println("\n\n---------- begin");
-	device_id = "4";//get_deivce_id_string();
+	device_id = "7"; //get_deivce_id_string();
+
 	Serial.println("device id = " + device_id + ";");
 }
 
@@ -35,20 +52,20 @@ void loop(void)
 {
 	// 获得此时测量的电压
 	String voltage = get_voltage_diff_string(3);
-	Serial.println("ADC differential 0_1, voltage = "
-	               + voltage + ";\n");
+	Serial.println("ADC differential 0_1, voltage = " +
+			voltage + ";\n");
 	delay(200);
 
 	// 构造 url
 	char url_data[60] = {0};
 	sprintf(url_data, "/send.php?voltage=%s&id=%s",
-	        voltage.c_str(), device_id.c_str());
+			voltage.c_str(), device_id.c_str());
 
 	String message = create_http_request_message("GET", url_data,
-	                 "HTTP/1.1",
-	                 "Host: at.aiamv.cn\n"
-	                 "Connection: close\n"
-	                 "Accept: text/html\n");
+			"HTTP/1.1",
+			"Host: at.aiamv.cn\n"
+			"Connection: close\n"
+			"Accept: text/html\n");
 	Serial.println(message);
 
 	// 发送 http 请求，并打印其返回值
