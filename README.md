@@ -36,19 +36,19 @@
 
 ---
 
-![Arduino_UNO.jpg](https://i.loli.net/2018/05/28/5b0b8b370dc7b.jpg)
+![arduino-uno](assets/arduino-uno.jpg)
 
 *Arduino UNO*
 
 ---
 
 
-![ads.png](https://i.loli.net/2018/05/28/5b0b8bd536780.png)
+![ads1015](assets/ads1015.png)
 
 *ADS1015*
 
 ---
 
-![esp8266.jpg](https://i.loli.net/2018/05/28/5b0b8c24297b1.jpg)
+![esp8266](assets/esp8266.jpg)
 
 *ESP8266*
