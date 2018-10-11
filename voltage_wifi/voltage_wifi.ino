@@ -3,12 +3,16 @@
 #include <avr/boot.h>
 #include "Adafruit_ADS1015.h"
 #include "data.h"
+#include "FlexiTimer2.h"
 
 Adafruit_ADS1015 ads;
 String device_id;
 
 #define _DEBUG_ESP8266 0
 #define _DEBUG_ADS1015 0
+
+
+int first_flag = 0;
 
 void setup()
 {
@@ -17,6 +21,7 @@ void setup()
 	Serial.begin(115200);
 	while (!Serial);
 	serial.begin(115200);
+
 
 #if _DEBUG_ADS1015
 
@@ -43,13 +48,31 @@ void setup()
 	device_id = "7"; //get_deivce_id_string();
 
 	Serial.println("device id = " + device_id + ";");
+
+	FlexiTimer2::set(1000, 1.0 / 1000, count_time);
+	FlexiTimer2::start();
 }
 
 // 复位，重启设备
 void (*resetFunc)(void) = 0;
 
+
+int timeout = 0;
+void count_time()
+{
+	timeout++;
+}
+
+const int SEND_TIMEOUT = 60 * 30;
 void loop(void)
 {
+	if (first_flag != 1 || timeout <= SEND_TIMEOUT) {
+		return;
+	}
+
+	first_flag = 0;
+	timeout = 0;
+	
 	// 获得此时测量的电压
 	String voltage = get_voltage_diff_string(3);
 	Serial.println("ADC differential 0_1, voltage = " +
@@ -89,7 +112,6 @@ void loop(void)
 		restart();
 		delay(2000);
 	}
-	delay(99000);
 
 }
 
